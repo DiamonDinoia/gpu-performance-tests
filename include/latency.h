@@ -81,10 +81,34 @@ __global__ void latencyKernel(const unsigned long* array, const unsigned long N,
     unsigned long index = (blockIdx.x * blockDim.x + threadIdx.x) % N;
 
     // iterate over the reads
-    for (unsigned long i = 0; i < reads; ++i) {
-        index = array[index];
-        result[0] += index;
-    }
+    for (unsigned long i = 0; i < reads; ++i) { index = array[index]; }
+    result[0] = index;
+}
+
+// this kernel invalidates the cache of the GPU
+__global__ void invalidateCacheKernel(unsigned long*      array,
+                                      const unsigned long N) {
+    // get the thread id
+    unsigned long index = (blockIdx.x * blockDim.x + threadIdx.x) % N;
+    // read the array
+    array[index] = 0;
+}
+
+// this function creates an array and uses it to invalidate the GPU cache and
+// the frees it
+void invalidateCache() {
+    const unsigned long blockCount  = 256;
+    const unsigned long threadCount = 256;
+    const unsigned long N           = blockCount * threadCount;
+    // create an array
+    unsigned long* deviceArray;
+    CUDA_CALL(cudaMalloc(&deviceArray, 100 * sizeof(unsigned long)));
+    // call the kernel
+    invalidateCacheKernel<<<blockCount, threadCount>>>(deviceArray, N);
+    // wait for the kernel to finish
+    CUDA_CALL(cudaDeviceSynchronize());
+    // free the memory
+    CUDA_CALL(cudaFree(deviceArray));
 }
 
 // this function call latencyKernel kernel
@@ -95,6 +119,7 @@ double measureLatency(const unsigned long* deviceArray, const unsigned long N,
                       const unsigned long threadCount,
                       const unsigned long blockCount,
                       unsigned long*      resultArray) {
+    invalidateCache();
     // create an event to measure the time
     auto start = std::chrono::high_resolution_clock::now();
     // call the kernel
@@ -178,7 +203,7 @@ void runTest(const unsigned long N, const unsigned long reads,
     auto time     = measureLatencyAndPrint(deviceArray, N, reads, threadCount,
                                            blockCount, resultArray);
 
-    auto readTime = time / reads;
+    auto readTime = time / (reads * threadCount * blockCount);
     std::cout << "Average memory read time: " << readTime << " ns" << std::endl;
 
     // copy the result from the device to the host
