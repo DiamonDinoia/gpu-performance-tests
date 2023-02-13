@@ -1,9 +1,14 @@
+#include <XoshiroCpp.hpp>
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <random>
+#include <string>
 
+// this macro checks if a cuda function call was successful
 #define CUDA_CALL(x)                                        \
     do {                                                    \
         if ((x) != cudaSuccess) {                           \
@@ -18,13 +23,17 @@ constexpr auto ITERATIONS = 5;
 // it is used to generate random numbers on the host
 class RandomNumberGenerator {
    public:
-    RandomNumberGenerator(const unsigned long seed = 42) : m_generator(seed) {}
+    RandomNumberGenerator(const unsigned long seed = std::random_device()())
+        : m_generator(seed) {
+        std::cout << "Seed: " << seed << std::endl;
+    }
 
     // returns an array of integers with a given size, range is equal the size
     // that is shuffled using merseene twister
     std::vector<unsigned long> getRandomVector(const unsigned N) {
         std::vector<unsigned long> array(N);
-        // fill the array with numbers from 0 to N
+// fill the array with numbers from 0 to N
+#pragma omp simd
         for (unsigned long i = 0; i < N; ++i) { array[i] = i; }
         // shuffle the array
         std::shuffle(array.begin(), array.end(), m_generator);
@@ -32,7 +41,7 @@ class RandomNumberGenerator {
     }
 
    private:
-    std::mt19937_64 m_generator;
+    XoshiroCpp::Xoshiro256PlusPlus m_generator;
 };
 
 // This function generates an array of random numbers on the host
@@ -47,6 +56,14 @@ unsigned long* generateRandomNumbersOnDevice(RandomNumberGenerator& generator,
     // copy the array to the device
     unsigned long* deviceArray;
     CUDA_CALL(cudaMalloc(&deviceArray, vector.size() * sizeof(unsigned long)));
+    CUDA_CALL(cudaMemcpy(deviceArray, vector.data(),
+                         vector.size() * sizeof(unsigned long),
+                         cudaMemcpyHostToDevice));
+    // print GPU memory utiuization
+    size_t free, total;
+    CUDA_CALL(cudaMemGetInfo(&free, &total));
+    std::cout << "GPU memory usage: " << (total - free) / 1024 / 1024 << " MB"
+              << std::endl;
     return deviceArray;
 }
 
@@ -113,14 +130,44 @@ double measureLatencyAndPrint(const unsigned long* deviceArray,
     return averageTime;
 }
 
+// this function creates a csv file with the header
+void createCSVFile(const std::string& OUTPUT_CSV) {
+    // open the file
+    std::ofstream file;
+    file.open(OUTPUT_CSV);
+    // write the header
+    file << "N,reads,threadCount,blockCount,latency" << std::endl;
+    // close the file
+    file.close();
+}
+
+// this function appends size, threeadCount, blockCount, reads and latency to
+// the a csv file
+void appendToCSV(const unsigned long N, const unsigned long reads,
+                 const unsigned long threadCount,
+                 const unsigned long blockCount, const double latency,
+                 const std::string& OUTPUT_CSV) {
+    // open the file
+    std::ofstream file;
+    file.open(OUTPUT_CSV, std::ios_base::app);
+    // write the data
+    file << N << "," << reads << "," << threadCount << "," << blockCount << ","
+         << latency << std::endl;
+    // close the file
+    file.close();
+}
+
 // this function calls generateRandomNumbersOnDevice, measureLatencyAndPrint and
 // freeMemoryOnDevice
 void runTest(const unsigned long N, const unsigned long reads,
-             const unsigned long threadCount, const unsigned long blockCount) {
+             const unsigned long threadCount, const unsigned long blockCount,
+             const std::string& OUTPUT_CSV) {
     // create a random number generator
     RandomNumberGenerator generator;
     // generate random numbers on the device
-    std::cout << "Generating random numbers on the device" << std::endl;
+    std::cout
+        << "Generating random numbers on the CPU and copying them to the GPU"
+        << std::endl;
     unsigned long* deviceArray = generateRandomNumbersOnDevice(generator, N);
 
     // allocate memory for the result
@@ -132,8 +179,7 @@ void runTest(const unsigned long N, const unsigned long reads,
                                            blockCount, resultArray);
 
     auto readTime = time / reads;
-    std::cout << "Avewrage memory read time: " << readTime << " ns"
-              << std::endl;
+    std::cout << "Average memory read time: " << readTime << " ns" << std::endl;
 
     // copy the result from the device to the host
     unsigned long result;
@@ -146,6 +192,10 @@ void runTest(const unsigned long N, const unsigned long reads,
     freeMemoryOnDevice(deviceArray);
     // frees the result array
     freeMemoryOnDevice(resultArray);
+    // if the output csv does not exist it calls createCSVFile
+    if (!std::filesystem::exists(OUTPUT_CSV)) { createCSVFile(OUTPUT_CSV); }
+    // appends the data to the csv file
+    appendToCSV(N, reads, threadCount, blockCount, readTime, OUTPUT_CSV);
 }
 
 // // this function parses the command line arguments using getopt it accepts
