@@ -1,48 +1,11 @@
-#include <XoshiroCpp.hpp>
-#include <algorithm>
-#include <array>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <random>
 #include <string>
-
-// this macro checks if a cuda function call was successful
-#define CUDA_CALL(x)                                        \
-    do {                                                    \
-        if ((x) != cudaSuccess) {                           \
-            printf("Error at %s:%d\n", __FILE__, __LINE__); \
-            exit(x);                                        \
-        }                                                   \
-    } while (0)
+#include "utils.h"
 
 constexpr auto ITERATIONS = 5;
-
-// this class contains a random number generator
-// it is used to generate random numbers on the host
-class RandomNumberGenerator {
-   public:
-    RandomNumberGenerator(const unsigned long seed = std::random_device()())
-        : m_generator(seed) {
-        std::cout << "Seed: " << seed << std::endl;
-    }
-
-    // returns an array of integers with a given size, range is equal the size
-    // that is shuffled using merseene twister
-    std::vector<unsigned long> getRandomVector(const unsigned N) {
-        std::vector<unsigned long> array(N);
-// fill the array with numbers from 0 to N
-#pragma omp simd
-        for (unsigned long i = 0; i < N; ++i) { array[i] = i; }
-        // shuffle the array
-        std::shuffle(array.begin(), array.end(), m_generator);
-        return array;
-    }
-
-   private:
-    XoshiroCpp::Xoshiro256PlusPlus m_generator;
-};
 
 // This function generates an array of random numbers on the host
 // copies it to the device and prints it
@@ -120,6 +83,7 @@ double measureLatency(const unsigned long* deviceArray, const unsigned long N,
                       const unsigned long blockCount,
                       unsigned long*      resultArray) {
     invalidateCache();
+    CUDA_CALL(cudaDeviceSynchronize());
     // create an event to measure the time
     auto start = std::chrono::high_resolution_clock::now();
     // call the kernel
@@ -203,7 +167,7 @@ void runTest(const unsigned long N, const unsigned long reads,
     auto time     = measureLatencyAndPrint(deviceArray, N, reads, threadCount,
                                            blockCount, resultArray);
 
-    auto readTime = time / (reads * threadCount * blockCount);
+    auto readTime = time / reads;
     std::cout << "Average memory read time: " << readTime << " ns" << std::endl;
 
     // copy the result from the device to the host

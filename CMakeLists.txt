@@ -41,10 +41,13 @@ CUDA_DETECT_INSTALLED_GPUS(INSTALLED_GPU_CCS_1)
 string(STRIP "${INSTALLED_GPU_CCS_1}" INSTALLED_GPU_CCS_2)
 string(REPLACE " " ";" INSTALLED_GPU_CCS_3 "${INSTALLED_GPU_CCS_2}")
 string(REPLACE "." "" CUDA_ARCH_LIST "${INSTALLED_GPU_CCS_3}")
-SET(CMAKE_CUDA_ARCHITECTURES ${CUDA_ARCH_LIST})
+set(CMAKE_CUDA_ARCHITECTURES ${CUDA_ARCH_LIST})
 set_property(GLOBAL PROPERTY CUDA_ARCHITECTURES "${CUDA_ARCH_LIST}")
 
 include_directories(include)
 
 add_executable(latency-test latency.cu)
-target_compile_features(latency-test INTERFACE cxx_std_11) # This means at least C++11
+target_compile_features(latency-test INTERFACE cxx_std_17) # This means at least C++11
+
+add_executable(branch-test branch.cu)
+target_compile_features(latency-test INTERFACE cxx_std_17) # This means at least C++11
