@@ -19,11 +19,13 @@ __global__ kernel (bool *random){
 ```
 Note: Waps are assumed of size = 32.  
 
-The CPU code generates an array `R` of 32 elements. Each element is 1 with probability p, 0 with probability 1-p (discrete distribution).  
-Then this array is copied to the GPU. The GPU kernel computes  `idx = THREAD_ID % 32` and in case `R[idx]` is `1` does something otherwise executes a function that has the same number of PTX instructions.  
-This causes the branch to diverge every time a 0 is encountered. 
+The CPU code generates an array R with 32 elements. Each element has a discrete distribution: it is 1 with probability p, and 0 with probability 1-p. This array is then copied to the GPU.
+
+In the GPU kernel, the variable idx is computed as THREAD_ID % 32. If R[idx] is 1, the kernel performs a certain action, while if it is 0, the kernel executes a function with the same number of PTX instructions. This results in branch divergence every time a 0 is encountered, which can be seen in the graph below.
+
 ![](images/branch_penalty.png)  
-The results shw that if even one warps diverges the performance halves.
+
+The results show that if even one warp diverges, the performance of the program is halved.
 
 ### Memory latency
 The pseudocode for the benchmark is:
@@ -39,12 +41,11 @@ __global__ kernel(uint64_t* vector) {
     }
 }
 ```
-The code starts by creating an array where array[i]=i and the shuffles it. Since the code was slow xoroshiro-cpp passed to the shuffling function. The array is generated using this method to avoid random number generation on the GPU which can pollute the results.
-The array is then copied to the GPU.  
-The kernel computed the tid and uses the tid to address one element of the array. Then it assigns `index = vector[index]` in a loop executed reads time.
-Given how the array is constructed this causes uniform stochastic memory accesses. The kernel is executed read times to dilute the calling overhead that can pollute the results.
-![](images/read_latency.png)  
-The results show that the when the array fits in cache the latency is `~30ns`. However, when the array does not fit in cache anymore it increases to `~170ns` and even `~300ns`. If memory contention (parallel accesses from multiple threads) is added, the latency can increase up to `~360ns`.
+The code begins by creating an array where array[i] = i and then shuffling it using the xoroshiro-cpp random number generator. This method is used to avoid random number generation on the GPU, which can affect the accuracy of the results. The resulting array is then copied to the GPU.
 
+The kernel uses the thread ID to address one element of the array, and then assigns index = vector[index] in a loop that is executed read times. Because of how the array is constructed, this results in uniform stochastic memory accesses. The kernel is executed read times to dilute the calling overhead, which can affect the accuracy of the results.
+![](images/read_latency.png)  
+
+The results show that when the array fits in cache, the latency is around 30ns. However, when the array no longer fits in cache, the latency increases to ~170ns, and in some cases, up to ~300ns. If memory contention (parallel accesses from multiple threads) is introduced, the latency can increase to around ~360ns. This can be seen in the graph below.
 
 ### Note: tests are executed on a NVIDIA RTX 3090ti and CUDA V11.8.89
