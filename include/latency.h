@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+
 #include "utils.h"
 
 constexpr auto ITERATIONS = 5;
@@ -10,41 +11,37 @@ constexpr auto ITERATIONS = 5;
 // This function generates an array of random numbers on the host
 // copies it to the device and prints it
 // and frees the meemory on the device
-unsigned long* generateRandomNumbersOnDevice(RandomNumberGenerator& generator,
-                                             const unsigned long    N) {
+Element* generateRandomNumbersOnDevice(RandomNumberGenerator& generator,
+                                       const unsigned long    N) {
     // create a random number generator
     // generate an array of random numbers
-    std::vector<unsigned long> vector = generator.getRandomVector(N);
+    std::vector<Element> vector = generator.getShuffledVector(N);
 
     // copy the array to the device
-    unsigned long* deviceArray;
-    CUDA_CALL(cudaMalloc(&deviceArray, vector.size() * sizeof(unsigned long)));
+    Element* deviceArray;
+    CUDA_CALL(cudaMalloc(&deviceArray, vector.size() * sizeof(Element)));
     CUDA_CALL(cudaMemcpy(deviceArray, vector.data(),
-                         vector.size() * sizeof(unsigned long),
+                         vector.size() * sizeof(Element),
                          cudaMemcpyHostToDevice));
-    // print GPU memory utiuization
-    size_t free, total;
-    CUDA_CALL(cudaMemGetInfo(&free, &total));
-    std::cout << "GPU memory usage: " << (total - free) / 1024 / 1024 << " MB"
-              << std::endl;
     return deviceArray;
 }
 
 // this function frees the memory on the device
-void freeMemoryOnDevice(unsigned long* deviceArray) {
+template <typename T>
+void freeMemoryOnDevice(T* deviceArray) {
     CUDA_CALL(cudaFree(deviceArray));
 }
 
 // this kernel reads an array of random numbers from the device
 // it is designed to do random memory accesses
-__global__ void latencyKernel(const unsigned long* array, const unsigned long N,
+__global__ void latencyKernel(const Element* array, const unsigned long N,
                               const unsigned long reads,
                               unsigned long*      result) {
     // get the thread id
     unsigned long index = (blockIdx.x * blockDim.x + threadIdx.x) % N;
 
     // iterate over the reads
-    for (unsigned long i = 0; i < reads; ++i) { index = array[index]; }
+    for (unsigned long i = 0; i < reads; ++i) { index = array[index].index; }
     result[0] = index;
 }
 
@@ -77,7 +74,7 @@ void invalidateCache() {
 // this function call latencyKernel kernel
 // it also measures the time it takes to execute the kernel
 // and returns the time in milliseconds
-double measureLatency(const unsigned long* deviceArray, const unsigned long N,
+double measureLatency(const Element* deviceArray, const unsigned long N,
                       const unsigned long reads,
                       const unsigned long threadCount,
                       const unsigned long blockCount,
@@ -101,8 +98,8 @@ double measureLatency(const unsigned long* deviceArray, const unsigned long N,
 
 // this function call measureLatency ITERATIONS times and computes the average
 // time then it prints it and returns it
-double measureLatencyAndPrint(const unsigned long* deviceArray,
-                              const unsigned long N, const unsigned long reads,
+double measureLatencyAndPrint(const Element* deviceArray, const unsigned long N,
+                              const unsigned long reads,
                               const unsigned long threadCount,
                               const unsigned long blockCount,
                               unsigned long*      resultArray) {
@@ -151,21 +148,24 @@ void appendToCSV(const unsigned long N, const unsigned long reads,
 void runTest(const unsigned long N, const unsigned long reads,
              const unsigned long threadCount, const unsigned long blockCount,
              const std::string& OUTPUT_CSV) {
+    const auto mem_block_size = operator""_KB(N);
+    // Each memory access fetches a cache line
+    const auto num_nodes = mem_block_size / kCachelineSize;
     // create a random number generator
     RandomNumberGenerator generator;
     // generate random numbers on the device
     std::cout
         << "Generating random numbers on the CPU and copying them to the GPU"
         << std::endl;
-    unsigned long* deviceArray = generateRandomNumbersOnDevice(generator, N);
+    Element* deviceArray = generateRandomNumbersOnDevice(generator, num_nodes);
 
     // allocate memory for the result
     unsigned long* resultArray;
     CUDA_CALL(cudaMalloc(&resultArray, sizeof(unsigned long)));
     // measure the latency
     std::cout << "Measuring latency" << std::endl;
-    auto time     = measureLatencyAndPrint(deviceArray, N, reads, threadCount,
-                                           blockCount, resultArray);
+    auto time     = measureLatencyAndPrint(deviceArray, num_nodes, reads,
+                                           threadCount, blockCount, resultArray);
 
     auto readTime = time / reads;
     std::cout << "Average memory read time: " << readTime << " ns" << std::endl;
@@ -186,40 +186,3 @@ void runTest(const unsigned long N, const unsigned long reads,
     // appends the data to the csv file
     appendToCSV(N, reads, threadCount, blockCount, readTime, OUTPUT_CSV);
 }
-
-// // this function parses the command line arguments using getopt it accepts
-// and
-// // and returns size of the array, number of reads, number of threads and
-// number
-// // of blocks
-// void parseCommandLineArguments(const int argc, const char* argv[],
-//                                unsigned long& N, unsigned long& reads,
-//                                unsigned long& threadCount,
-//                                unsigned long& blockCount) {
-//     // check if the number of arguments is correct
-//     if (argc != 5) {
-//         std::cout << "Usage: " << argv[0] << " N reads threadCount
-//         blockCount"
-//                   << std::endl;
-//         exit(1);
-//     }
-//     // parse the arguments
-//     N           = atoll(argv[1]);
-//     reads       = atoll(argv[2]);
-//     threadCount = atoll(argv[3]);
-//     blockCount  = atoll(argv[4]);
-// }
-
-// int main(const int argc, const char* argv[]) {
-//     // parse the command line arguments
-//     unsigned long N, reads, threadCount, blockCount;
-//     parseCommandLineArguments(argc, argv, N, reads, threadCount, blockCount);
-//     // print the arguments
-//     std::cout << "N: " << N << std::endl;
-//     std::cout << "reads: " << reads << std::endl;
-//     std::cout << "threadCount: " << threadCount << std::endl;
-//     std::cout << "blockCount: " << blockCount << std::endl;
-//     // run the test
-//     runTest(N, reads, threadCount, blockCount);
-//     return 0;
-// }

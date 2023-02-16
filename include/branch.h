@@ -8,6 +8,7 @@
 constexpr auto  RUNS       = 5;
 constexpr auto  ITERATIONS = 16384 << 2;
 
+
 __global__ void branch_kernel(int* result, const int y, const int z,
                               const int iterations1, const int iterations2,
                               const bool* random) {

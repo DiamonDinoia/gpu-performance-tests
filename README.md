@@ -43,7 +43,8 @@ __global__ kernel(uint64_t* vector) {
 ```
 The code begins by creating an array where array[i] = i and then shuffling it using the xoroshiro-cpp random number generator. This method is used to avoid random number generation on the GPU, which can affect the accuracy of the results. The resulting array is then copied to the GPU.
 
-The kernel uses the thread ID to address one element of the array, and then assigns index = vector[index] in a loop that is executed read times. Because of how the array is constructed, this results in uniform stochastic memory accesses. The kernel is executed read times to dilute the calling overhead, which can affect the accuracy of the results.
+The kernel uses the thread ID to address one element of the array, and then assigns index = vector[index] in a loop that is executed read times. Because of how the array is constructed, this results in uniform stochastic memory accesses. The kernel is executed read times to dilute the calling overhead, which can affect the accuracy of the results.  
+
 ![](images/read_latency.png)  
 
 The results show that when the array fits in cache, the latency is around 30ns. However, when the array no longer fits in cache, the latency increases to ~170ns, and in some cases, up to ~300ns. If memory contention (parallel accesses from multiple threads) is introduced, the latency can increase to around ~360ns. This can be seen in the graph below.
