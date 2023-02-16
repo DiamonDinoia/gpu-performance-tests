@@ -54,7 +54,7 @@ class RandomNumberGenerator {
     // this function generates a vector of 32 booleans using a discrete
     // distribution with proability p and 1-p for 0 and 1 respectively
     std::array<bool, 32> getRandomBoolVector(const double p) {
-        std::discrete_distribution<unsigned char> distribution({1 - p, p});
+        std::discrete_distribution<unsigned short> distribution({1 - p, p});
         //
         std::array<bool, 32> array{};
         for (auto& elem : array) {
