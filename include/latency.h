@@ -129,7 +129,7 @@ void createCSVFile(const std::string& OUTPUT_CSV) {
 
 // this function appends size, threeadCount, blockCount, reads and latency to
 // the a csv file
-void appendToCSV(const unsigned long N, const unsigned long reads,
+void appendToCSV(const double N, const unsigned long reads,
                  const unsigned long threadCount,
                  const unsigned long blockCount, const double latency,
                  const std::string& OUTPUT_CSV) {
@@ -184,5 +184,6 @@ void runTest(const unsigned long N, const unsigned long reads,
     // if the output csv does not exist it calls createCSVFile
     if (!std::filesystem::exists(OUTPUT_CSV)) { createCSVFile(OUTPUT_CSV); }
     // appends the data to the csv file
-    appendToCSV(N, reads, threadCount, blockCount, readTime, OUTPUT_CSV);
+    appendToCSV(mem_block_size * 64. / (1024 * 1024), reads, threadCount,
+                blockCount, readTime, OUTPUT_CSV);
 }
