@@ -5,12 +5,14 @@
 #include <vector>
 
 // this macro checks if a cuda function call was successful
-#define CUDA_CALL(x)                                        \
-    do {                                                    \
-        if ((x) != cudaSuccess) {                           \
-            printf("Error at %s:%d\n", __FILE__, __LINE__); \
-            exit(x);                                        \
-        }                                                   \
+#define CUDA_CALL(x)                                                 \
+    do {                                                             \
+        if ((x) != cudaSuccess) {                                    \
+            printf("Error at %s:%d\n", __FILE__, __LINE__);          \
+            std::cout << "CUDA error: " << cudaGetErrorString(x)     \
+                      << std::endl;                                  \
+            exit(x);                                                 \
+        }                                                            \
     } while (0)
 
 // User-defined literals

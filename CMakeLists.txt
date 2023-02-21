@@ -20,7 +20,10 @@ set_property(GLOBAL PROPERTY CUDA_ARCHITECTURES "${CUDA_ARCH_LIST}")
 include_directories(include)
 
 add_executable(latency-test latency.cu)
-target_compile_features(latency-test INTERFACE cxx_std_17) # This means at least C++11
+target_compile_features(latency-test PRIVATE cxx_std_17 cuda_std_17) 
+
+add_executable(shared-test shared.cu)
+target_compile_features(shared-test PRIVATE cxx_std_17 cuda_std_17)
 
 add_executable(branch-test branch.cu)
-target_compile_features(latency-test INTERFACE cxx_std_17) # This means at least C++11
+target_compile_features(branch-test PRIVATE cxx_std_17 cuda_std_17)

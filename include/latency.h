@@ -6,7 +6,8 @@
 
 #include "utils.h"
 
-constexpr auto ITERATIONS = 5;
+constexpr auto     ITERATIONS = 5;
+__shared__ Element sharedArray[48_KB / sizeof(Element)];
 
 // This function generates an array of random numbers on the host
 // copies it to the device and prints it
@@ -30,6 +31,30 @@ Element* generateRandomNumbersOnDevice(RandomNumberGenerator& generator,
 template <typename T>
 void freeMemoryOnDevice(T* deviceArray) {
     CUDA_CALL(cudaFree(deviceArray));
+}
+
+// this kernel copies the array of Elements from global to shared memory
+__global__ void copyToSharedKernel(const Element*      globalArray,
+                                   const unsigned long N) {
+    for (auto globalIdx = blockIdx.x * blockDim.x + threadIdx.x; globalIdx < N;
+         globalIdx += blockDim.x * gridDim.x) {
+        sharedArray[globalIdx] = globalArray[globalIdx];
+    }
+}
+
+// this kernel reads an array of random numbers from the shared memory
+// it is designed to do random memory accesses
+__global__ void latencySharedKernel(const unsigned long N,
+                                    const unsigned long reads,
+                                    unsigned long*      result) {
+    // get the thread id
+    unsigned long index = (blockIdx.x * blockDim.x + threadIdx.x) % N;
+
+    // iterate over the reads
+    for (unsigned long i = 0; i < reads; ++i) {
+        index = sharedArray[index].index;
+    }
+    result[0] = index;
 }
 
 // this kernel reads an array of random numbers from the device
@@ -74,6 +99,7 @@ void invalidateCache() {
 // this function call latencyKernel kernel
 // it also measures the time it takes to execute the kernel
 // and returns the time in milliseconds
+template <bool USE_SHARED_MEMORY>
 double measureLatency(const Element* deviceArray, const unsigned long N,
                       const unsigned long reads,
                       const unsigned long threadCount,
@@ -84,8 +110,12 @@ double measureLatency(const Element* deviceArray, const unsigned long N,
     // create an event to measure the time
     auto start = std::chrono::high_resolution_clock::now();
     // call the kernel
-    latencyKernel<<<blockCount, threadCount>>>(deviceArray, N, reads,
-                                               resultArray);
+    if constexpr (USE_SHARED_MEMORY) {
+        latencySharedKernel<<<blockCount, threadCount>>>(N, reads, resultArray);
+    } else {
+        latencyKernel<<<blockCount, threadCount>>>(deviceArray, N, reads,
+                                                   resultArray);
+    }
     // wait for the kernel to finish
     CUDA_CALL(cudaDeviceSynchronize());
     auto stop = std::chrono::high_resolution_clock::now();
@@ -98,6 +128,7 @@ double measureLatency(const Element* deviceArray, const unsigned long N,
 
 // this function call measureLatency ITERATIONS times and computes the average
 // time then it prints it and returns it
+template <bool USE_SHARED_MEMORY>
 double measureLatencyAndPrint(const Element* deviceArray, const unsigned long N,
                               const unsigned long reads,
                               const unsigned long threadCount,
@@ -106,8 +137,8 @@ double measureLatencyAndPrint(const Element* deviceArray, const unsigned long N,
     // measure the time
     double sum = 0;
     for (unsigned int i = 0; i < ITERATIONS; ++i) {
-        sum += measureLatency(deviceArray, N, reads, threadCount, blockCount,
-                              resultArray);
+        sum += measureLatency<USE_SHARED_MEMORY>(
+            deviceArray, N, reads, threadCount, blockCount, resultArray);
     }
     // compute the average time
     double averageTime = sum / ITERATIONS;
@@ -145,12 +176,13 @@ void appendToCSV(const double N, const unsigned long reads,
 
 // this function calls generateRandomNumbersOnDevice, measureLatencyAndPrint and
 // freeMemoryOnDevice
+template <bool USE_SHARED_MEMORY>
 void runTest(const unsigned long N, const unsigned long reads,
              const unsigned long threadCount, const unsigned long blockCount,
              const std::string& OUTPUT_CSV) {
     const auto mem_block_size = operator""_KB(N);
     // Each memory access fetches a cache line
-    const auto num_nodes = mem_block_size / kCachelineSize;
+    const auto num_nodes = USE_SHARED_MEMORY ? mem_block_size/sizeof(Element) :  mem_block_size / kCachelineSize;
     // create a random number generator
     RandomNumberGenerator generator;
     // generate random numbers on the device
@@ -159,13 +191,19 @@ void runTest(const unsigned long N, const unsigned long reads,
         << std::endl;
     Element* deviceArray = generateRandomNumbersOnDevice(generator, num_nodes);
 
+    // copy the array to shared memory
+    if constexpr (USE_SHARED_MEMORY) {
+        copyToSharedKernel<<<128, 128>>>(deviceArray, num_nodes);
+        CUDA_CALL(cudaDeviceSynchronize());
+    }
+
     // allocate memory for the result
     unsigned long* resultArray;
     CUDA_CALL(cudaMalloc(&resultArray, sizeof(unsigned long)));
     // measure the latency
     std::cout << "Measuring latency" << std::endl;
-    auto time     = measureLatencyAndPrint(deviceArray, num_nodes, reads,
-                                           threadCount, blockCount, resultArray);
+    auto time = measureLatencyAndPrint<USE_SHARED_MEMORY>(
+        deviceArray, num_nodes, reads, threadCount, blockCount, resultArray);
 
     auto readTime = time / reads;
     std::cout << "Average memory read time: " << readTime << " ns" << std::endl;
