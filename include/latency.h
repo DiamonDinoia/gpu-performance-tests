@@ -182,7 +182,8 @@ void runTest(const unsigned long N, const unsigned long reads,
              const std::string& OUTPUT_CSV) {
     const auto mem_block_size = operator""_KB(N);
     // Each memory access fetches a cache line
-    const auto num_nodes = USE_SHARED_MEMORY ? mem_block_size/sizeof(Element) :  mem_block_size / kCachelineSize;
+    const auto num_nodes = USE_SHARED_MEMORY ? mem_block_size / sizeof(Element)
+                                             : mem_block_size / kCachelineSize;
     // create a random number generator
     RandomNumberGenerator generator;
     // generate random numbers on the device

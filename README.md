@@ -47,7 +47,7 @@ The kernel uses the thread ID to address one element of the array, and then assi
 
 ![](images/read_latency.png)  
 
-The results show that when the array fits in cache, the latency is around 30ns. However, when the array no longer fits in cache, the latency increases to ~170ns, and in some cases, up to ~300ns. If memory contention (parallel accesses from multiple threads) is introduced, the latency can increase to around ~360ns. This can be seen in the graph below.
+The results show that when the array fits in cache, the latency is around 30ns. However, when the array no longer fits in cache, the latency increases to ~170ns, and in some cases, up to ~300ns. If memory contention (parallel accesses from multiple threads) is introduced, the latency can increase to around ~360ns. This can be seen in the graph above. For comparison shared memmory has a read latency of 17ns with or without contention. 
 
 ### Note: tests are executed on a NVIDIA RTX 3090ti and CUDA V11.8.89
 
