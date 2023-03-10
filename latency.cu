@@ -9,7 +9,7 @@ void runTestPowersOf2() {
     for (unsigned long i = 1ULL << 0ULL; i < 1ULL << 19ULL; i <<= 1) {
         const auto size = operator""_KB(i);
         std::cout << "N = " << size * 64. / (1024 * 1024) << " MB" << std::endl;
-        runTest<false>(i, 1ULL << 18, 128, 1, OUTPUT_CSV);
+        runTest<false>(i, 1ULL << 18, 1, 1, OUTPUT_CSV);
     }
 }
 
